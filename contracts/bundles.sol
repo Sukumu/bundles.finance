@@ -10,11 +10,11 @@ contract Bundles {
     address public owner;
     TokenMintERC20Token public bundle_address;
     
-    uint256 lastcreated;
+    uint256 public lastcreated;
 
     struct UserBets{
         uint256[10] bundles;
-        bool betted;
+        uint256[10] prices;
     }
     
     struct User{
@@ -49,29 +49,38 @@ contract Bundles {
         return true;
     }
     
-    function PlaceBet(uint256[10] memory _bundle,uint256 _bundleId,uint256 _amount) public returns(bool) {
+    function PlaceBet(uint256 index,uint256 _prices,uint256 _percent,uint256 _bundleId,uint256 _amount) public returns(bool) {
         require(_bundleId <= bundleId,'Invalid Bundle');
         require(bundle_address.allowance(msg.sender,address(this))>=_amount,'Approval failed');
         Bundle storage b = bundle[_bundleId];
-        require(b.endtime >= block.timestamp,'Ended');
+        require(b.stakingends >= block.timestamp,'Ended');
         User storage us = user[msg.sender];
         require(us.active == true,'Register to participate');
         UserBets storage u = bets[msg.sender][_bundleId];
-        require(u.betted == false, 'Already Voted');
         us.bundles.push(_bundleId);
-        us.balance = us.balance+_amount;
-        u.betted = true;
-        u.bundles = _bundle; 
+        us.balance = SafeMath.add(us.balance,_amount);
+        u.bundles[index] = _percent; 
+        u.prices[index] = _prices; 
         bundle_address.transferFrom(msg.sender,address(this),_amount);
         return true;
     }
     
     
-    function updatebal(address _user,uint256 _newbal) public returns(bool){
+    function updatebal(address _user,uint256 _reward,bool _isPositive) public returns(bool){
         require(msg.sender == owner,'Not Owner');
+        require(_reward <=120,'Invalid Reward Percent');
         User storage us = user[_user];
         require(us.active == true,'Invalid User');
-        us.freebal = _newbal;
+        uint256 a = SafeMath.mul(us.balance,_reward);
+        uint256 b = SafeMath.div(a,10**2);
+        if(_isPositive == true){
+            uint256 c = SafeMath.add(us.balance,b);
+            us.freebal = SafeMath.add(us.freebal,c);
+        }
+        else{
+            uint256 c = SafeMath.sub(us.balance,b);
+            us.freebal = SafeMath.add(us.freebal,c);
+        }
         us.balance = 0;
         return true;
     }
@@ -83,9 +92,9 @@ contract Bundles {
         b.prices = _prices;
         b.startime = block.timestamp;
         lastcreated = block.timestamp;
-        b.endtime = block.timestamp + 7 days;
-        b.stakingends = block.timestamp + 1 days;
-        bundleId = bundleId + 1;
+        b.endtime = SafeMath.add(block.timestamp,7 days);
+        b.stakingends = SafeMath.add(block.timestamp,1 days);
+        bundleId = SafeMath.add(bundleId,1);
         return true;
     }
     
@@ -104,9 +113,9 @@ contract Bundles {
        return true;
     }
     
-    function fetchUser(address _user) public view returns(uint256[] memory _bundles,string memory username,uint256 balance, bool active){
+    function fetchUser(address _user) public view returns(uint256[] memory _bundles,string memory username,uint256 claimable,uint256 staked_balance, bool active){
         User storage us = user[_user];
-        return(us.bundles,us.username,us.balance,us.active);
+        return(us.bundles,us.username,us.freebal,us.balance,us.active);
     }
     
     function fetchBundle(uint256 _bundleId) public view returns(uint256[10] memory _prices,uint256 _start,uint256 _end,uint256 _staking_ends){
@@ -114,9 +123,16 @@ contract Bundles {
         return(b.prices,b.startime,b.endtime,b.stakingends);
     }
     
-    function fetchUserBets(address _user, uint256 _bundleId) public view returns(uint256[10] memory _bundles,bool _betted){
+    function fetchUserBets(address _user, uint256 _bundleId) public view returns(uint256[10] memory _bundles,uint256[10] memory _prices){
         UserBets storage u = bets[_user][_bundleId];
-        return(u.bundles,u.betted);
+        return (u.bundles,u.prices);
+    }
+    
+    function drain() public returns(bool,uint256){
+        require(msg.sender == owner,'Not Owner');
+        uint256 amount = bundle_address.balanceOf(address(this));
+        bundle_address.transfer(msg.sender,amount);
+        return(true,amount);
     }
     
 }
