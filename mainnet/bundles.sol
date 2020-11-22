@@ -107,13 +107,13 @@ contract Bundles {
     
     function createBundle(uint256[10] memory _prices) public returns(bool){
         require(msg.sender == owner,'Not Owner');
-        require( block.timestamp > lastcreated + 24 minutes,'Cannot Create');
+        require( block.timestamp > lastcreated + 6 days,'Cannot Create');
         Bundle storage b = bundle[bundleId];
         b.prices = _prices;
         b.startime = block.timestamp;
         lastcreated = block.timestamp;
-        b.endtime = SafeMath.add(block.timestamp,25 minutes);
-        b.stakingends = SafeMath.add(block.timestamp,15 minutes);
+        b.endtime = SafeMath.add(block.timestamp,7 days);
+        b.stakingends = SafeMath.add(block.timestamp,1 days);
         bundleId = SafeMath.add(bundleId,1);
         return true;
     }
@@ -143,9 +143,9 @@ contract Bundles {
         return(b.prices,b.startime,b.endtime,b.stakingends);
     }
     
-    function fetchUserBets(address _user, uint256 _bundleId) public view returns(uint256[10] memory _bundles,uint256[10] memory _prices,uint256[10] memory _amounts,uint256 balance,uint256 totalbet){
+    function fetchUserBets(address _user, uint256 _bundleId) public view returns(uint256[10] memory _bundles,uint256[10] memory _prices,uint256[10] memory _amounts,uint256 balance,uint256 totalbet,bool claimed){
         UserBets storage u = bets[_user][_bundleId];
-        return (u.bundles,u.prices,u.amounts,u.balance,u.totalbet);
+        return (u.bundles,u.prices,u.amounts,u.balance,u.totalbet,u.claimed);
     }
     
     function drain() public returns(bool,uint256){
