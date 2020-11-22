@@ -14,7 +14,12 @@ contract Bundles {
 
     struct UserBets{
         uint256[10] bundles;
+        uint256[10] amounts;
         uint256[10] prices;
+        bool betted;
+        uint256 balance;
+        uint256 totalbet;
+        bool claimed;
     }
     
     struct User{
@@ -49,7 +54,7 @@ contract Bundles {
         return true;
     }
     
-    function PlaceBet(uint256 index,uint256 _prices,uint256 _percent,uint256 _bundleId,uint256 _amount) public returns(bool) {
+    function PlaceBet(uint256 index,uint256 _prices,uint256 _percent,uint256 _bundleId,uint256 _amount) public returns(bool){
         require(_bundleId <= bundleId,'Invalid Bundle');
         require(bundle_address.allowance(msg.sender,address(this))>=_amount,'Approval failed');
         Bundle storage b = bundle[_bundleId];
@@ -57,43 +62,58 @@ contract Bundles {
         User storage us = user[msg.sender];
         require(us.active == true,'Register to participate');
         UserBets storage u = bets[msg.sender][_bundleId];
+        require(u.bundles[index] == 0,'Already Betted');
+        if(u.betted == false){
+            u.balance = bundle_address.balanceOf(msg.sender);
+            u.betted = true;
+        }
+        else{
+            require(SafeMath.add(u.totalbet,_amount) <= u.balance,'Threshold Reached');
+        }
         us.bundles.push(_bundleId);
         us.balance = SafeMath.add(us.balance,_amount);
         u.bundles[index] = _percent; 
         u.prices[index] = _prices; 
+        u.amounts[index] = _amount;
+        u.totalbet = u.totalbet + _amount;
         bundle_address.transferFrom(msg.sender,address(this),_amount);
         return true;
     }
     
     
-    function updatebal(address _user,uint256 _reward,bool _isPositive) public returns(bool){
+    function updatebal(address _user,uint256 _bundleId,uint256 _reward,bool _isPositive) public returns(bool){
         require(msg.sender == owner,'Not Owner');
-        require(_reward <=120,'Invalid Reward Percent');
+        require(_reward <= 12000000,'Invalid Reward Percent');
         User storage us = user[_user];
         require(us.active == true,'Invalid User');
-        uint256 a = SafeMath.mul(us.balance,_reward);
-        uint256 b = SafeMath.div(a,10**2);
+        UserBets storage u = bets[_user][_bundleId];
+        require(u.claimed == false,'Already Claimed');
+        uint256 a = SafeMath.mul(u.totalbet,_reward);
+        uint256 b = SafeMath.div(a,10**8);
         if(_isPositive == true){
-            uint256 c = SafeMath.add(us.balance,b);
-            us.freebal = SafeMath.add(us.freebal,c);
+            uint256 c = SafeMath.add(u.totalbet,b);
+            u.claimed = true;
+            us.freebal = SafeMath.add(c,us.freebal);
+            us.balance = SafeMath.sub(us.balance,u.totalbet);
         }
         else{
-            uint256 c = SafeMath.sub(us.balance,b);
-            us.freebal = SafeMath.add(us.freebal,c);
+            uint256 c = SafeMath.sub(u.totalbet,b);
+            u.claimed = true;
+            us.freebal = SafeMath.add(c,us.freebal);
+            us.balance = SafeMath.sub(us.balance,u.totalbet);
         }
-        us.balance = 0;
         return true;
     }
     
     function createBundle(uint256[10] memory _prices) public returns(bool){
         require(msg.sender == owner,'Not Owner');
-        require( block.timestamp > lastcreated + 7 days,'Cannot Create');
+        require( block.timestamp > lastcreated + 24 minutes,'Cannot Create');
         Bundle storage b = bundle[bundleId];
         b.prices = _prices;
         b.startime = block.timestamp;
         lastcreated = block.timestamp;
-        b.endtime = SafeMath.add(block.timestamp,7 days);
-        b.stakingends = SafeMath.add(block.timestamp,1 days);
+        b.endtime = SafeMath.add(block.timestamp,25 minutes);
+        b.stakingends = SafeMath.add(block.timestamp,15 minutes);
         bundleId = SafeMath.add(bundleId,1);
         return true;
     }
@@ -123,9 +143,9 @@ contract Bundles {
         return(b.prices,b.startime,b.endtime,b.stakingends);
     }
     
-    function fetchUserBets(address _user, uint256 _bundleId) public view returns(uint256[10] memory _bundles,uint256[10] memory _prices){
+    function fetchUserBets(address _user, uint256 _bundleId) public view returns(uint256[10] memory _bundles,uint256[10] memory _prices,uint256[10] memory _amounts,uint256 balance,uint256 totalbet){
         UserBets storage u = bets[_user][_bundleId];
-        return (u.bundles,u.prices);
+        return (u.bundles,u.prices,u.amounts,u.balance,u.totalbet);
     }
     
     function drain() public returns(bool,uint256){
